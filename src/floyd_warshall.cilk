@@ -1,0 +1,188 @@
+/*
+ * floydWarshall.cilk
+ *
+ */
+
+#include <cilk.h>
+#include <cilkview.h>
+#include <iostream>
+
+// a naive, iterative, first phase of floyd Warshall elimination without pivoting, algorithm
+template<typename T> void floydWarshall_naive_iterative(int n, T* A)
+{
+ 	for (int k = 0; k < n; ++k)
+	{
+    		for (int i = 0; i < n; ++i)
+        	{
+			for (int j = 0; j < n; ++j)
+			{
+				A[i * n + j] = std::min(A[i * n + j], A[i * n + k] + A[k * n + j]);
+			}
+		}
+	}
+}
+
+// f(X, U, V, W) returns the value to be stored in X
+template<typename T> double floydWarshall_function(int n, T* A, int k, int i, int j)
+{
+	double value;
+	value = std::min(A[i * n + j], A[i * n + k] + A[k * n + j]);
+	return value;
+} 
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm A(X, U, V, W)
+template<typename T> void floydWarshall_par_A(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		A[i*n + j] = floydWarshall_function(n, A, k, i, j); 
+	}
+	else {
+		floydWarshall_par_A(n, A, k, i, j, new_size);
+		
+		cilk_spawn floydWarshall_par_B(n, A, k, i, j+new_size, new_size);
+		cilk_spawn floydWarshall_par_C(n, A, k, i+new_size, j, new_size);
+		
+		floydWarshall_par_D(n, A, k, i+new_size, j+new_size, new_size);
+
+		floydWarshall_par_A(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+		
+		cilk_spawn floydWarshall_par_B(n, A, k+new_size, i+new_size, j, new_size);
+		cilk_spawn floydWarshall_par_C(n, A, k+new_size, i, j+new_size, new_size);
+		
+		floydWarshall_par_D(n, A, k+new_size, i, j, new_size);
+
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm B(X, U, V, W)
+template<typename T> void floydWarshall_par_B(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		A[i*n + j] = floydWarshall_function(n, A, k, i, j); 
+	}
+	else {
+		cilk_spawn floydWarshall_par_B(n, A, k, i, j, new_size);
+		floydWarshall_par_B(n, A, k, i + new_size, j, new_size);
+		
+		cilk_sync;
+
+		cilk_spawn floydWarshall_par_D(n, A, k, i, j+new_size, new_size);
+		floydWarshall_par_D(n, A, k, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;
+		
+		cilk_spawn floydWarshall_par_B(n, A, k+new_size, i+new_size, j, new_size);
+		floydWarshall_par_B(n, A, k+new_size, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;		
+
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i, j, new_size);
+		floydWarshall_par_D(n, A, k+new_size, i, j+new_size, new_size);
+
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm C(X, U, V, W)
+template<typename T> void floydWarshall_par_C(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		A[i*n + j] = floydWarshall_function(n, A, k, i, j); 
+	}
+	else {
+		cilk_spawn floydWarshall_par_C(n, A, k, i, j, new_size);
+		floydWarshall_par_C(n, A, k, i+new_size, j, new_size);
+		
+		cilk_sync;
+		
+		cilk_spawn floydWarshall_par_D(n, A, k,i,j+new_size, new_size);
+		floydWarshall_par_D(n, A, k, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+
+		cilk_spawn floydWarshall_par_C(n, A, k+new_size, i, j+new_size, new_size);
+		floydWarshall_par_C(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i, j, new_size);
+		floydWarshall_par_D(n, A, k+new_size, i+new_size, j, new_size);
+
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm D(X, U, V, W)
+template<typename T> void floydWarshall_par_D(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		A[i*n + j] = floydWarshall_function(n, A, k, i, j); 
+	}
+	else {
+		cilk_spawn floydWarshall_par_D(n, A, k, i, j, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k, i, j+new_size, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k, i+new_size, j, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;
+
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i, j, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i, j+new_size, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i+new_size, j, new_size);
+		cilk_spawn floydWarshall_par_D(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;
+	}
+}
+
+int matrix_main(int n)
+{
+    cilk::cilkview cv;
+    std::cout << "Compute floyd Warshall Elimination First Phase for matrix of size " << n << "x" << n << std::endl;
+
+    double* A = (double*) calloc(n * n, sizeof(double));
+    for(int i = 0; i < n; i++) {
+	for(int j =0; j < n ; j++) {
+	// Populate A A[i*n + j] = (double) ((i * i) % 1024 - 512) / 512;
+	A[i*n + j] = (double) ((i +j) % 1024) / 512;
+	}
+    }
+
+	long par_dc_time; {
+            std::cout << "Running Divide and Conquer Parallel version..." << std::endl;
+            cv.reset();
+	    cv.start();
+            floydWarshall_par_A(n, A, 0, 0, 0, n);
+	    cv.stop();
+	    cv.dump("parallel-floyd-warshall-dc-results", false);
+            par_dc_time = (long)cv.accumulated_milliseconds();
+            std::cout << "  Iterative Parallel version took   "
+                << par_dc_time / 1000.f << " seconds." << std::endl;
+        }
+   free(A);
+   return 0;
+}
+
+int cilk_main(int argc, char* argv[])
+{
+    int n = 10 * 100;;
+    if (argc > 1) {
+         n = std::atoi(argv[1]);
+         if (n <= 0) {
+              std::cerr << "Invalid argument" << std::endl;
+              std::cerr << "Usage: floydWarshall N" << std::endl;
+          }
+  }	
+    return matrix_main(n);
+}

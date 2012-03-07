@@ -1,0 +1,72 @@
+/*
+ * gaussian.cilk
+ *
+ */
+
+#include <cilk.h>
+#include <cilkview.h>
+#include <iostream>
+
+// a parallel iterative, first phase of gaussian elimination without pivoting, algorithm
+template<typename T> void gaussian_par_iterative(int n, T* A)
+{
+	// Note the loop order. Exchanging the two inner loops degrades performance
+	// because of cache access.
+	for (int k = 0; k < n; ++k)
+    	{
+		cilk_for (int i = 0; i < n; ++i)
+  		{
+	      		cilk_for (int j = 0; j < n; ++j)
+			{
+				if(k <= n-2 && k < i && i < n && k < j)
+                			A[i * n + j] -= (A[i * n + k] * A[k * n + j])/A[k * n + k];
+			}
+		}
+	}
+}
+
+int matrix_main(int n)
+{
+    cilk::cilkview cv;
+    // Create two random input matrices.
+
+    std::cout << "Compute Gaussian Elimination First Phase for matrix of size " << n << "x" << n << std::endl;
+
+    double* A = (double*) calloc(n * n, sizeof(double));
+    for(int i = 0; i < n; i++) {
+	for(int j =0; j < n ; j++) {
+	// Populate A 
+	if(i != j)
+		A[i*n + j] = (double) ((i * i) % 1024 - 512) / 512;
+	else
+		A[i*n +j] = (double) (23455 * i + 988);
+	}
+    }
+     long par_naive_time; {
+            std::cout << "Running Iterative Parallel version..." << std::endl;
+            cv.reset();
+	    cv.start();
+            gaussian_par_iterative(n, A);
+	    cv.stop();
+	    cv.dump("naive_gaussian", false);
+            par_naive_time = (long)cv.accumulated_milliseconds();
+            std::cout << "  Iterative Parallel version took   "
+                << par_naive_time / 1000.f << " seconds." << std::endl;
+        }
+	
+   free(A);
+   return 0;
+}
+
+int cilk_main(int argc, char* argv[])
+{
+    int n = 10 * 100;;
+    if (argc > 1) {
+         n = std::atoi(argv[1]);
+         if (n <= 0) {
+              std::cerr << "Invalid argument" << std::endl;
+              std::cerr << "Usage: gaussian N" << std::endl;
+          }
+  }	
+    return matrix_main(n);
+}

@@ -1,0 +1,192 @@
+/*
+ * gaussian.cilk
+ *
+ */
+
+#include <cilk.h>
+#include <cilkview.h>
+#include <iostream>
+#include <iomanip>
+
+// Sigma(g) set checks for the range of values for k, i, j
+bool gaussian_check(int n, int k, int i, int j)
+{
+	if(k <= (n-2) && k < i && i < n && k < j)
+		return 1;
+	else 
+		return 0;
+}
+
+// f(X, U, V, W) returns the value to be stored in X
+template<typename T> double gaussian_function(int n, T* A, int k, int i, int j)
+{
+	double value = (A[i * n + k] * A[k * n + j])/A[k * n + k];
+	return value;
+} 
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm A(X, U, V, W)
+template<typename T> void gaussian_par_A(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		if(gaussian_check(n, k, i, j))
+			A[i * n + j] -= gaussian_function(n, A, k, i, j);
+		else
+			return; }
+	else {
+		gaussian_par_A(n, A, k, i, j, new_size);
+		
+		cilk_spawn gaussian_par_B(n, A, k, i, j+new_size, new_size);
+		cilk_spawn gaussian_par_C(n, A, k, i+new_size, j, new_size);
+		
+		gaussian_par_D(n, A, k, i+new_size, j+new_size, new_size);
+
+		gaussian_par_A(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+		
+		cilk_spawn gaussian_par_B(n, A, k+new_size, i+new_size, j, new_size);
+		cilk_spawn gaussian_par_C(n, A, k+new_size, i, j+new_size, new_size);
+		
+		gaussian_par_D(n, A, k+new_size, i, j, new_size);
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm B(X, U, V, W)
+template<typename T> void gaussian_par_B(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		if(gaussian_check(n, k, i, j))
+			A[i * n + j] -= gaussian_function(n, A, k, i, j);
+		else
+			return; }
+	else {
+		cilk_spawn gaussian_par_B(n, A, k, i, j, new_size);
+		gaussian_par_B(n, A, k, i + new_size, j, new_size);
+		
+		cilk_sync;
+
+		cilk_spawn gaussian_par_D(n, A, k, i, j+new_size, new_size);
+		gaussian_par_D(n, A, k, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;
+		
+		cilk_spawn gaussian_par_B(n, A, k+new_size, i+new_size, j, new_size);
+		gaussian_par_B(n, A, k+new_size, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;		
+
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i, j, new_size);
+		gaussian_par_D(n, A, k+new_size, i, j+new_size, new_size);
+
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm C(X, U, V, W)
+template<typename T> void gaussian_par_C(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		if(gaussian_check(n, k, i, j))
+			A[i * n + j] -= gaussian_function(n, A, k, i, j);
+		else
+			return; }
+	else {
+		cilk_spawn gaussian_par_C(n, A, k, i, j, new_size);
+		gaussian_par_C(n, A, k, i+new_size, j, new_size);
+		
+		cilk_sync;
+		
+		cilk_spawn gaussian_par_D(n, A, k,i,j+new_size, new_size);
+		gaussian_par_D(n, A, k, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+
+		cilk_spawn gaussian_par_C(n, A, k+new_size, i, j+new_size, new_size);
+		gaussian_par_C(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;		
+
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i, j, new_size);
+		gaussian_par_D(n, A, k+new_size, i+new_size, j, new_size);
+
+		cilk_sync;
+	}
+}
+
+// a divide and conquer recursive, parallel matrix multiplication algorithm D(X, U, V, W)
+template<typename T> void gaussian_par_D(int n, T* A, int k, int i, int j, int size)
+{
+	int new_size = size / 2;
+
+	if(size == 1) {
+		if(gaussian_check(n, k, i, j))
+			A[i * n + j] -= gaussian_function(n, A, k, i, j);
+		else
+			return; }
+	else {
+		cilk_spawn gaussian_par_D(n, A, k, i, j, new_size);
+		cilk_spawn gaussian_par_D(n, A, k, i, j+new_size, new_size);
+		cilk_spawn gaussian_par_D(n, A, k, i+new_size, j, new_size);
+		cilk_spawn gaussian_par_D(n, A, k, i+new_size, j+new_size, new_size);
+		
+		cilk_sync;
+
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i, j, new_size);
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i, j+new_size, new_size);
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i+new_size, j, new_size);
+		cilk_spawn gaussian_par_D(n, A, k+new_size, i+new_size, j+new_size, new_size);
+
+		cilk_sync;
+	}
+}
+
+int matrix_main(int n)
+{
+    cilk::cilkview cv;
+    std::cout << "Compute Gaussian Elimination First Phase for matrix of size " << n << "x" << n << std::endl;
+
+    double* A = (double*) calloc(n * n, sizeof(double));
+    for(int i = 0; i < n; i++) {
+	for(int j =0; j < n ; j++) {
+	// Populate A 
+	if(i != j)
+		A[i*n + j] = (double) ((i * i) % 1024 - 512) / 512;
+	else
+		A[i*n +j] = (double) (23455 * i + 988);
+	}
+    }
+
+     long par_dc_time; {
+            std::cout << "Running Divide and Conquer Parallel version..." << std::endl;
+            cv.reset();
+	    cv.start();
+            gaussian_par_A(n, A, 0, 0, 0, n);
+	    cv.stop();
+	    cv.dump("parallel-gaussian-dc-results", false);
+            par_dc_time = (long)cv.accumulated_milliseconds();
+            std::cout << "  Iterative Parallel version took   "
+                << par_dc_time / 1000.f << " seconds." << std::endl;
+        }
+   free(A);
+   return 0;
+}
+
+int cilk_main(int argc, char* argv[])
+{
+    int n = 512;
+    if (argc > 1) {
+         n = std::atoi(argv[1]);
+         if (n <= 0) {
+              std::cerr << "Invalid argument" << std::endl;
+              std::cerr << "Usage: gaussian N" << std::endl;
+          }
+  }	
+    return matrix_main(n);
+}

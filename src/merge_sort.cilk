@@ -1,0 +1,87 @@
+#include <cilk.h>
+#include <cilkview.h>
+#include <algorithm>
+#include <iostream>
+#include <iterator>
+#include <functional>
+#include <math.h>
+
+void merge_sort_without(int *elements, long left, long right){
+	if(right == left)
+		return;
+	else
+	{
+		int *temp = (int *)malloc((right-left+1) * sizeof(int));
+	
+		long length = right - left+1;
+		long lpos = left;
+		long mid = left + length/2;
+		long rpos = mid;
+		cilk_spawn merge_sort_without(elements, lpos, mid-1);
+		cilk_spawn merge_sort_without(elements, rpos, right);
+		cilk_sync;
+		
+		for(long i = 0; i < length; i++){
+			if((lpos < mid) && ((rpos == right+1)||(elements[lpos] < elements[rpos]))){
+				temp[i] = elements[lpos];
+				lpos++;
+			}
+			else{
+				temp[i] = elements[rpos];
+				rpos++;
+			}
+		}
+		for( int index = left; index <= right; index++)
+			elements[index] = temp[index-left];
+		free(temp);
+	}	
+	
+}
+
+
+// A simple test harness 
+int qmain(long n)
+{
+    int* elements = new int[n];
+    cilk::cilkview cv;
+    bool flag = 1;
+    
+    for (long i = 0; i < n; ++i)
+	*(elements + i) = i%1024 +1;
+    std::random_shuffle(elements,elements+n);
+    
+    cv.start();
+    merge_sort_without(elements, 0, n-1);
+    cv.stop();
+    cv.dump("merge_sort_without_parallel_merge-results", false);
+    std::cout << cv.accumulated_milliseconds() / 1000.f << " seconds" << std::endl;
+    
+    for (int i = 0; i < n - 1; ++i) 
+    {
+        if (elements[i] > elements[i + 1]) 
+	{
+            std::cout << "Sort failed at location i=" << i << " a[i] = "
+                      << elements[i] << " a[i+1] = " << elements[i + 1] << std::endl;
+	    flag = 0;
+	}
+    }
+    if(flag)
+    	std::cout << "Calculation succeeded." 	<< std::endl;
+    delete[] elements;
+	
+    return 0;
+}
+
+int cilk_main(int argc, char* argv[])
+{
+    long n = pow(10,7) ;
+    if (argc > 1) {
+         n = std::atoi(argv[1]);
+         if (n <= 0) {
+              std::cerr << "Invalid argument" << std::endl;            
+              std::cerr << "N = number of elements to sort" << std::endl;
+              return 1;
+         }
+    }
+    return qmain(n);
+}

@@ -1,0 +1,66 @@
+#include <cilk.h>
+#include <cilkview.h>
+#include <algorithm>
+#include <iostream>
+#include <iterator>
+#include <functional>
+#include <math.h>
+#include <reducer_opadd.h>
+
+/* simple LJ implementation */
+double simple_lj(double * points, long n){
+	cilk::reducer_opadd<double> e;
+	double result;
+	cilk_for(long i =0; i < n; i++)
+		cilk_for(long j = 0; j < n; j++)
+		{
+				double d;
+				if( i != j)
+				{
+				d = sqrt(pow((*(points + i*3 +0) - *(points + j*3 +0)),2) + pow((*(points + i*3 +1) - *(points + j*3 +1)),2) + pow((*(points + i*3 +2) - *(points + j*3 +2)),2));
+				e += pow(d,-12) - pow(d,-6);
+				}
+		}
+	result = e.get_value();
+	return result;	
+}
+
+
+// A simple test harness 
+int qmain(long n)
+{
+    double result;
+    double* points = (double*) calloc(n* n, sizeof(double));
+    cilk::cilkview cv;
+
+    for (long i = 0; i < n; ++i)
+		for(long j = 0;j < 3;j++)
+			*(points + i*3 +j) = i+j+1;
+
+    cv.start();
+    result = simple_lj(points, n);
+    cv.stop();
+    cv.dump("naive_lj-results", false);
+
+    std::cout << cv.accumulated_milliseconds() / 1000.f << " seconds" << std::endl;
+    std::cout << "Value for Lennard Jones Potential is " << result <<"\n";
+    free(points);
+	return 0;
+}
+
+int cilk_main(int argc, char* argv[])
+{
+    long n = pow(10,3) ;
+    if (argc > 1) {
+         n = std::atoi(argv[1]);
+         if (n <= 0) {
+              std::cerr << "Invalid argument" << std::endl;
+              
+              std::cerr << "       N = number of points " << std::endl;
+              return 1;
+         }
+    }
+
+    return qmain(n);
+}
+
