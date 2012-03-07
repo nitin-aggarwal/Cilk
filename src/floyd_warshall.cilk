@@ -1,6 +1,5 @@
 /*
  * floydWarshall.cilk
- *
  */
 
 #include <cilk.h>

@@ -1,6 +1,5 @@
 /*
  * gaussian.cilk
- *
  */
 
 #include <cilk.h>

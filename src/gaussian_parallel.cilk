@@ -1,6 +1,5 @@
 /*
- * gaussian.cilk
- *
+ * gaussian_parallel.cilk
  */
 
 #include <cilk.h>
